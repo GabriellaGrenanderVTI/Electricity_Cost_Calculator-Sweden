@@ -1,4 +1,3 @@
-##################### MODELING REGION CHOICES #####################
 def filterMunicipalitySubset(df, municipalityList, year):
     """
     Filter the DataFrame to include only the specified municipalities.

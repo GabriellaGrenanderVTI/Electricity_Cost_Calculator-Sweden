@@ -1,6 +1,3 @@
-
-##################### FILTER #####################
-
 def filterYear(df, year):
     """
     Filter the DataFrame to include only the specified year.

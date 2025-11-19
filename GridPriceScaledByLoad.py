@@ -16,6 +16,7 @@ and municipalities in Sweden.
 from pathlib import Path
 from typing import Tuple, List
 
+import argparse
 import calendar
 import logging
 import numpy as np
@@ -334,14 +335,14 @@ def calculateNetworkPrice_RElist(
 
 def calculateElectricityPrice_8760(elspot_df: pd.DataFrame,
                                    RElist: list,
-                                   BIDDING_AREA: str, 
+                                   bidding_area: str, 
                                    loadProfile_df: pd.DataFrame) -> pd.DataFrame:
     """
     Calculate electricity spot prices for all hours in a year.
 
     Args:
         elspot_df (pd.DataFrame): DataFrame containing electricity spot prices
-        BIDDING_AREA (str): Electricity bidding area code (e.g. 'SE3')
+        bidding_area (str): Electricity bidding area code (e.g. 'SE3')
         loadProfile_df (pd.DataFrame): Load profile data with timestamp information
 
     Returns:
@@ -349,20 +350,20 @@ def calculateElectricityPrice_8760(elspot_df: pd.DataFrame,
     """
     spot_prices_df = pd.DataFrame(data=loadProfile_df[['Day', 'Month', 'Year', 'Hour', 'Season']])
     for RE in RElist:
-        spot_prices_df[RE] = elspot_df[[f'Electricity price ({BIDDING_AREA}, SEK/MWh)']]/1000
+        spot_prices_df[RE] = elspot_df[[f'Electricity price ({bidding_area}, SEK/MWh)']]/1000
     
     return spot_prices_df
 
 
-def transmogrifierInput(networkPrices_df: pd.DataFrame,
+def calculatorInput(networkPrices_df: pd.DataFrame,
                        highload_df: pd.DataFrame,
                        RElist: list,
                        loadProfile_df: pd.DataFrame,
                        scenario: str,
                        elspot_df: pd.DataFrame,
-                       BIDDING_AREA: str) -> tuple:
+                       bidding_area: str) -> tuple:
     """
-    Calculate all price components for the transmogrifier analysis.
+    Calculate all price components for the electricity price analysis.
 
     Args:
         networkPrices_df: Network pricing information
@@ -371,18 +372,18 @@ def transmogrifierInput(networkPrices_df: pd.DataFrame,
         loadProfile_df: Load profile data
         scenario: Scenario name
         elspot_df: Electricity spot prices
-        BIDDING_AREA: Bidding area code
+        bidding_area: Bidding area code
 
     Returns:
         tuple: (taxes_df, kw_charges_df, kwh_charges_df, spot_prices_df)
             - All price components in SEK/kWh
     """
     taxesAndFixedFees_prices_df, kWCharge_prices_df, kWhCharge_prices_df = calculateNetworkPrice_RElist(networkPrices_df, highload_df, RElist, loadProfile_df, scenario)
-    spot_prices_df = calculateElectricityPrice_8760(elspot_df, RElist, BIDDING_AREA, loadProfile_df)
+    spot_prices_df = calculateElectricityPrice_8760(elspot_df, RElist, bidding_area, loadProfile_df)
     return taxesAndFixedFees_prices_df, kWCharge_prices_df, kWhCharge_prices_df, spot_prices_df
 
-
-def createScenarioLoadProfiles() -> tuple[pd.DataFrame, list]:
+## TODO: Insert input argument information in docstring
+def createScenarioLoadProfiles(loadProfile_raw_df, useExampleScenario) -> tuple[pd.DataFrame, list]:
     """
     Create different load profile scenarios for analysis.
 
@@ -396,46 +397,42 @@ def createScenarioLoadProfiles() -> tuple[pd.DataFrame, list]:
             - scenarios_df: DataFrame containing all load profile scenarios
             - scenario_list: List of scenario names
     """
-    loadProfile_raw_df = fm.readLoadProfile('data/EV-bus-charging-needs-Arsalan.xlsx')
+    scenarioList = []
 
-    scenarioList = ['Base load profile', 'Flat load profile', 'Shaved load profile']
-
-    ### Scenario 0: Base case - Arsalan's load profile
+    ### Scenario 0: Base case
     loadProfile_scenarios_df = loadProfile_raw_df.copy()
     loadProfile_scenarios_df = loadProfile_scenarios_df.rename(columns={'Energy (kWh)': 'Base load profile'})
+    
+    scenarioList.append('Base load profile')
 
-    ### Scenario 1: Flat load profile
-    loadProfile_scenarios_df['Flat load profile'] = loadProfile_scenarios_df['Base load profile'].sum()/24 #~221 kWh per hour
+    if useExampleScenario:
+        ### Scenario 1: Flat load profile
+        loadProfile_scenarios_df['Flat load profile'] = loadProfile_scenarios_df['Base load profile'].sum()/24 #~221 kWh per hour
+        
+        scenarioList.append('Flat load profile')
 
-    ### Scenario 2: Peak shaving 10%
-    peak_hour = loadProfile_scenarios_df['Base load profile'].idxmax()
-    peak_value = loadProfile_scenarios_df.loc[peak_hour, 'Base load profile']
+        ### Scenario 2: Peak shaving 10%
+        peak_hour = loadProfile_scenarios_df['Base load profile'].idxmax()
+        peak_value = loadProfile_scenarios_df.loc[peak_hour, 'Base load profile']
 
-    redistribute_amount = peak_value * 0.10
-    loadProfile_scenarios_df['Shaved load profile'] = loadProfile_scenarios_df['Base load profile']
-    loadProfile_scenarios_df.loc[peak_hour, 'Shaved load profile'] = peak_value * 0.90
+        redistribute_amount = peak_value * 0.10
+        loadProfile_scenarios_df['Shaved load profile'] = loadProfile_scenarios_df['Base load profile']
+        loadProfile_scenarios_df.loc[peak_hour, 'Shaved load profile'] = peak_value * 0.90
 
-    # Determine adjacent hours
-    before_hour = (peak_hour - 1) % 24
-    after_hour = (peak_hour + 1) % 24
+        # Determine adjacent hours
+        before_hour = (peak_hour - 1) % 24
+        after_hour = (peak_hour + 1) % 24
 
-    # Distribute the 10% amount to adjacent hours (split equally)
-    loadProfile_scenarios_df.loc[before_hour, 'Shaved load profile'] += redistribute_amount / 2
-    loadProfile_scenarios_df.loc[after_hour, 'Shaved load profile'] += redistribute_amount / 2 
+        # Distribute the 10% amount to adjacent hours (split equally)
+        loadProfile_scenarios_df.loc[before_hour, 'Shaved load profile'] += redistribute_amount / 2
+        loadProfile_scenarios_df.loc[after_hour, 'Shaved load profile'] += redistribute_amount / 2
+
+        scenarioList.append('Shaved load profile')
 
     return loadProfile_scenarios_df, scenarioList
 
-EFFECT_CUSTOMER_TYPE = 2 # Possible 1, 2, 3
-BIDDING_AREA = 'SE3'
 
-MODELING_MUNICIPALITIES = [
-    'Skövde', 'Götene', 'Skara', 'Falköping',
-    'Tidaholm', 'Hjo', 'Tibro', 'Töreboda', 'Mariestad'
-]
-YEAR_LIST = [2019, 2020, 2021, 2022, 2023]
-
-
-def main():
+def main(loadProfile_path: Path = None, effectCustomerType: int = 2, biddingArea: str = 'SE3', modelingMunicipalities: list = None, yearList: list = None, useExampleScenario: bool = False):
     """Main entry point for running the transmogrifier calculations (was previously top-level notebook code)."""
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger(__name__)
@@ -452,21 +449,24 @@ def main():
     loadProfile_seasonHourly_allYears_df = pd.DataFrame(columns=['Scenario', 'Year', 'Season', 'Hour', 'Load profile (kWh)'])
     totalCost_allYears_df = pd.DataFrame(columns=['Scenario', 'Year', 'Season', 'Municipality', 'Total Cost (DSO)', 'Fixed fees (DSO)', 'Power (DSO)', 'Energy (DSO)', 'Energy (Spot)'])
 
-    # Create scenario specific load profiles
-    loadProfile_scenarios_df, scenarioList = createScenarioLoadProfiles()
+    # Load load profile data
+    loadProfile_raw_df = fm.readLoadProfile(loadProfile_path) if loadProfile_path else pd.DataFrame()
 
-    for year in YEAR_LIST:
+    # Create scenario specific load profiles
+    loadProfile_scenarios_df, scenarioList = createScenarioLoadProfiles(loadProfile_raw_df, useExampleScenario)
+
+    for year in yearList:
         logger.info("Processing year %s", year)
 
-        municipalityData = fs.filterMunicipalitySubset(modelingData, MODELING_MUNICIPALITIES, year)
+        municipalityData = fs.filterMunicipalitySubset(modelingData, modelingMunicipalities, year)
 
         # List of REs in the modeling area
         RElist = fs.generateRElist(municipalityData, year)
 
         # Read in datafames with pricing data
         highload_df = fm.readHighloadtime()
-        networkPrices_df = fm.readEffectCustomerPrices(EFFECT_CUSTOMER_TYPE, year) #These are in kW
-        elspot_df = fm.readElspotPrices(year, BIDDING_AREA) #SEK/kWh
+        networkPrices_df = fm.readEffectCustomerPrices(effectCustomerType, year) #These are in kW
+        elspot_df = fm.readElspotPrices(year, biddingArea) #SEK/kWh
 
         # Shape the load profile to be on 8760 hours
         loadProfile_reshape_df = reshapeLoadProfile(loadProfile_scenarios_df, year)
@@ -475,14 +475,13 @@ def main():
             # Use scenario specific load profile
             loadProfile_df = loadProfile_reshape_df[['Day', 'Month', 'Year', 'Hour', 'Season', scenario]].copy()
 
-            taxesAndFixedFees_prices_df, kWCharge_prices_df, kWhCharge_prices_df, spot_prices_df = transmogrifierInput(networkPrices_df, highload_df, RElist, loadProfile_df, scenario, elspot_df, BIDDING_AREA)
+            taxesAndFixedFees_prices_df, kWCharge_prices_df, kWhCharge_prices_df, spot_prices_df = calculatorInput(networkPrices_df, highload_df, RElist, loadProfile_df, scenario, elspot_df, biddingArea)
 
             # Clean up
             data_taxesAndFixedFees_prices_df = prd.processData(taxesAndFixedFees_prices_df)
             data_kWCharge_prices_df = prd.processData(kWCharge_prices_df)
             data_kWhCharge_prices_df = prd.processData(kWhCharge_prices_df)
             data_spot_prices_df  = prd.processData(spot_prices_df)
-            data_loadProfile_df = prd.processData(loadProfile_df)
 
             # SEASON HOURLY (MEAN OVER ALL HOURS IN THE SEASON)
             taxesAndFixedFees_prices_seasonHourly_df = tm.seasonHourTrans(data_taxesAndFixedFees_prices_df, RElist, 'average')
@@ -491,7 +490,7 @@ def main():
             spot_prices_seasonHourly_df = tm.seasonHourTrans(data_spot_prices_df, RElist, 'average')
 
             #Transfer back into municipalities
-            for municipality in MODELING_MUNICIPALITIES:
+            for municipality in modelingMunicipalities:
                 RE = municipalityData.loc[modelingData['kommunnamn'] == municipality, f'Subredovisningsenhet ({year})'].item()
 
                 taxesAndFixedFees_prices_seasonHourly_df[municipality] = taxesAndFixedFees_prices_seasonHourly_df[RE]
@@ -507,7 +506,7 @@ def main():
 
                 return pd.melt(df,
                             ['Scenario', 'Year', 'Season', 'Hour'],
-                            MODELING_MUNICIPALITIES,
+                            modelingMunicipalities,
                             var_name = 'Municipality',
                             value_name= valueName)
 
@@ -552,5 +551,22 @@ def main():
 
 
 if __name__ == "__main__":
-    main()         
+    EFFECT_CUSTOMER_TYPE = 2    # Possible 1, 2, 3
+    BIDDING_AREA = 'SE3'        # Possible: SE1, SE2, SE3, SE4
+
+    MODELING_MUNICIPALITIES = [
+        'Skövde', 'Götene', 'Skara', 'Falköping',
+        'Tidaholm', 'Hjo', 'Tibro', 'Töreboda', 'Mariestad'
+    ]
+    YEAR_LIST = [2019]#, 2020, 2021, 2022, 2023]
+
+    LOADPROFILE_PATH = 'data\EV-bus-charging-needs-Arsalan.xlsx'
+
+    main(loadProfile_path=LOADPROFILE_PATH, 
+         effectCustomerType=EFFECT_CUSTOMER_TYPE, 
+         biddingArea=BIDDING_AREA,
+         modelingMunicipalities=MODELING_MUNICIPALITIES,
+         yearList=YEAR_LIST
+         )
+    
             

@@ -1,4 +1,3 @@
-from IPython.display import display
 import pandas as pd
 
 from FilterTime import filterSeason, filterMonth, filterWeekdayWeekend, filterHour
