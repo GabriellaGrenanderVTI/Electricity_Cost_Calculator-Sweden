@@ -1,1 +1,0 @@
-Innehåller shapefil över kommunytor och länsytor, med information om kommun/länsnamn och kommun/regionkod
