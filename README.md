@@ -1,4 +1,4 @@
-# Electricity Grid Price Calculator
+# Electricity Cost Calculator - Sweden
 
 ## Overview
 This project calculates electricity wholesale and grid costs given a load profile for different distribution system operators (DSOs) in Sweden. It handles various components of electricity pricing including taxes, fixed fees, power charges, and energy charges. The system is designed to analyze electricity costs for different DSOs and load patterns over multiple years.
