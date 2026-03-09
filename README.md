@@ -38,12 +38,11 @@ Transmogrifier/
 │   │       ├── 2022/SE1-4/*.xlsx
 │   │       ├── 2023/SE1-4/*.xlsx
 │   │       └── 2024/SE1-4/*.xlsx
-│   └── effektkunder-1999-2025.xlsx   # (network tariffs)
+│   └── effektkunder-1999-2025.xlsx   # Network tariffs
 │
-├── input/
-│   └── studyarea.xlsx                (study area configuration)
+├── input/                            # Input directory
 │
-└── output/                           # Generated results
+└── output/                           # Output directory
 ```
 
 ## Prerequisites
