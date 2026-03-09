@@ -14,7 +14,7 @@ This project calculates electricity wholesale and grid costs given a load profil
 
 ## Project Structure
 ```
-Transmogrifier/
+Energy Cost Calculator - Sweden/
 │
 ├── Main.py                           # Main orchestration pipeline
 ├── FileManagement.py                 # File I/O and data loading helpers
