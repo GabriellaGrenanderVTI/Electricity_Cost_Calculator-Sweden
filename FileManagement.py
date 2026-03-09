@@ -13,6 +13,7 @@ Notes:
     and shapes.
 """
 
+import calendar
 from datetime import datetime
 from pathlib import Path
 import pandas as pd
@@ -156,6 +157,13 @@ def readElspotPrices_Vattenfall(year: int, biddingArea: str) -> pd.DataFrame:
 
     df[f'Electricity price ({biddingArea}, SEK/MWh)'] = df['Pris (öre/kWh)']*10 # multiply by 10 to get SEK/MWh
     df = df.drop(columns=['Pris (öre/kWh)'])
+    
+    # Remove February 29 for leap years to match reshapeLoadProfile (which produces 8760 hours excluding Feb 29)
+    if calendar.isleap(year):
+        df_parsed = pd.to_datetime(df['Tidsperiod'], format='%Y-%m-%d %H:%M')
+        not_feb29 = ~((df_parsed.dt.month == 2) & (df_parsed.dt.day == 29))
+        df = df[not_feb29].reset_index(drop=True)
+    
     return df
 
 def readLoadProfile(path: str, sheet: str) -> pd.DataFrame:

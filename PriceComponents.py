@@ -398,20 +398,46 @@ def calculateNetworkPrice_RElist(networkPrices_df, RElist, loadProfile_df, scena
 
 
 
-def calculateElectricityPrice_8760(elspot_df, RElist, bidding_area, loadProfile_df):
+def calculateElectricityPrice_8760(elspot_prices_by_area, RElist, re_bidding_areas, loadProfile_df):
     """Calculate electricity spot prices for all hours in a year.
 
     Args:
-        elspot_df (pd.DataFrame): DataFrame containing electricity spot prices
+        elspot_prices_by_area (dict[str, pd.DataFrame]): Mapping from bidding
+            area code to DataFrame containing electricity spot prices.
         RElist (list): RE identifiers to compute for.
-        bidding_area (str): Electricity bidding area code (e.g. 'SE3')
+        re_bidding_areas (dict[str, str]): Mapping from RE identifier to
+            bidding area code.
         loadProfile_df (pd.DataFrame): Load profile data with timestamp information
 
     Returns:
         pd.DataFrame: Hourly spot prices in SEK/kWh for each regional entity
     """
     spot_prices_df = pd.DataFrame(data=loadProfile_df[['Day', 'Month', 'Year', 'Hour', 'Season']])
+
     for RE in RElist:
-        spot_prices_df[RE] = elspot_df[[f'Electricity price ({bidding_area}, SEK/MWh)']] / 1000
+        if RE not in re_bidding_areas:
+            raise KeyError(f"Missing bidding area mapping for RE '{RE}'")
+
+        bidding_area = re_bidding_areas[RE]
+        if bidding_area not in elspot_prices_by_area:
+            raise KeyError(
+                f"Missing elspot data for bidding area '{bidding_area}' (RE '{RE}')"
+            )
+
+        elspot_df = elspot_prices_by_area[bidding_area]
+        price_column = f'Electricity price ({bidding_area}, SEK/MWh)'
+        if price_column not in elspot_df.columns:
+            raise KeyError(
+                f"Column '{price_column}' not found in elspot data for area '{bidding_area}'"
+            )
+
+        price_values = (elspot_df[price_column].to_numpy() / 1000)
+        if len(price_values) != len(loadProfile_df):
+            raise ValueError(
+                f"Spot price length mismatch for area '{bidding_area}': "
+                f"{len(price_values)} prices vs {len(loadProfile_df)} load rows"
+            )
+
+        spot_prices_df[RE] = price_values
 
     return spot_prices_df
